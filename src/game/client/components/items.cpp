@@ -309,7 +309,7 @@ void CItems::RenderLaser(const CLaserData *pCurrent, bool IsPredicted)
 			Ticks = (float)(Client()->PredGameTick(g_Config.m_ClDummy) - pCurrent->m_StartTick) + Client()->PredIntraGameTick(g_Config.m_ClDummy);
 		else
 			Ticks = (float)(Client()->GameTick(g_Config.m_ClDummy) - pCurrent->m_StartTick) + Client()->IntraGameTick(g_Config.m_ClDummy);
-		float Ms = (Ticks / 50.0f) * 1000.0f;
+		float Ms = (Ticks / (float)SERVER_TICK_SPEED) * 1000.0f;
 		float a = Ms / m_pClient->GetTuning(TuneZone)->m_LaserBounceDelay;
 		a = clamp(a, 0.0f, 1.0f);
 		float Ia = 1 - a;

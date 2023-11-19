@@ -6,6 +6,7 @@
 
 #include "graph.h"
 #include "smooth_time.h"
+#include "engine/shared/protocol.h"
 
 void CSmoothTime::Init(int64_t Target)
 {
@@ -59,13 +60,13 @@ void CSmoothTime::Update(CGraph *pGraph, int64_t Target, int TimeLeft, EAdjustDi
 	if(TimeLeft < 0)
 	{
 		bool IsSpike = false;
-		if(TimeLeft < -50)
+		if(TimeLeft < -SERVER_TICK_SPEED)
 		{
 			IsSpike = true;
 
 			m_SpikeCounter += 5;
-			if(m_SpikeCounter > 50)
-				m_SpikeCounter = 50;
+			if(m_SpikeCounter > SERVER_TICK_SPEED)
+				m_SpikeCounter = SERVER_TICK_SPEED;
 		}
 
 		if(IsSpike && m_SpikeCounter < 15)

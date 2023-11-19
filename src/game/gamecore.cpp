@@ -163,6 +163,19 @@ void CCharacterCore::Tick(bool UseInput, bool DoDeferredTick)
 	float Accel = Grounded ? m_Tuning.m_GroundControlAccel : m_Tuning.m_AirControlAccel;
 	float Friction = Grounded ? m_Tuning.m_GroundFriction : m_Tuning.m_AirFriction;
 
+	// static float maxX = 0;
+	
+	// if(fabsf(m_Vel.x) < maxX)
+	// {
+	// 	printf("velocity decreased by %f\n", fabsf(m_Vel.x)-maxX);
+	// }
+	// maxX = fabsf(m_Vel.x);
+
+	// static float lastX = m_Pos.x;
+
+	// printf("vel X: %f\t actual %f\n", m_Vel.x/32 * SERVER_TICK_SPEED, (m_Pos.x-lastX)/32 * SERVER_TICK_SPEED);
+	// lastX = m_Pos.x;
+
 	// handle input
 	if(UseInput)
 	{
@@ -454,8 +467,8 @@ void CCharacterCore::TickDeferred()
 					if(length(m_Vel) > 0.0001f)
 						Velocity = 1 - (dot(normalize(m_Vel), Dir) + 1) / 2; // Wdouble-promotion don't fix this as this might change game physics
 
-					m_Vel += Dir * a * (Velocity * 0.75f);
-					m_Vel *= 0.85f;
+					m_Vel += Dir * a * (Velocity * 0.75f)/(SERVER_TICK_SPEED/50.0);
+					m_Vel *= pow(0.85f, 1/(SERVER_TICK_SPEED/50.0));
 				}
 
 				// handle hook influence
@@ -488,7 +501,10 @@ void CCharacterCore::TickDeferred()
 
 	// clamp the velocity to something sane
 	if(length(m_Vel) > 6000)
+	{
+		printf("normalizing velocity\n");
 		m_Vel = normalize(m_Vel) * 6000;
+	}
 }
 
 void CCharacterCore::Move()
@@ -522,6 +538,51 @@ void CCharacterCore::Move()
 	}
 	else
 		m_LeftWall = true;
+
+	bool top = false, down = false, left = false, right = false;
+
+	if(m_pCollision->TestBox(vec2(m_Pos.x, m_Pos.y+32), vec2(28.0f, 28.0f)))
+		down = true;
+
+	if(m_pCollision->TestBox(vec2(m_Pos.x, m_Pos.y-32), vec2(28.0f, 28.0f)))
+		top = true;
+	
+	if(m_pCollision->TestBox(vec2(m_Pos.x+32, m_Pos.y), vec2(28.0f, 28.0f)))
+		right = true;
+
+	if(m_pCollision->TestBox(vec2(m_Pos.x-32, m_Pos.y), vec2(28.0f, 28.0f)))
+		left = true;
+
+	if(down || top)
+		NewPos.y = round_to_int(NewPos.y);
+
+	if(left || right)
+		NewPos.x = round_to_int(NewPos.x);
+
+	//corner cases
+	if(m_pCollision->TestBox(vec2(m_Pos.x+32, m_Pos.y+32), vec2(28.0f, 28.0f)) && !down && !right)
+	{
+		NewPos.x = round_to_int(NewPos.x);
+		NewPos.y = round_to_int(NewPos.y);
+	}
+	
+	if(m_pCollision->TestBox(vec2(m_Pos.x-32, m_Pos.y+32), vec2(28.0f, 28.0f)) && !down && !left)
+	{
+		NewPos.x = round_to_int(NewPos.x);
+		NewPos.y = round_to_int(NewPos.y);
+	}
+
+	if(m_pCollision->TestBox(vec2(m_Pos.x-32, m_Pos.y-32), vec2(28.0f, 28.0f)) && !top && !left)
+	{
+		NewPos.x = round_to_int(NewPos.x);
+		NewPos.y = round_to_int(NewPos.y);
+	}
+
+	if(m_pCollision->TestBox(vec2(m_Pos.x+32, m_Pos.y-32), vec2(28.0f, 28.0f)) && !top && !right)
+	{
+		NewPos.x = round_to_int(NewPos.x);
+		NewPos.y = round_to_int(NewPos.y);
+	}
 
 	m_Vel.x = m_Vel.x * (1.0f / RampValue);
 
@@ -564,8 +625,8 @@ void CCharacterCore::Move()
 
 void CCharacterCore::Write(CNetObj_CharacterCore *pObjCore)
 {
-	pObjCore->m_X = round_to_int(m_Pos.x);
-	pObjCore->m_Y = round_to_int(m_Pos.y);
+	pObjCore->m_X = round_to_int(m_Pos.x * (SERVER_TICK_SPEED > 50 ? 4 : 1));
+	pObjCore->m_Y = round_to_int(m_Pos.y * (SERVER_TICK_SPEED > 50 ? 4 : 1));
 
 	pObjCore->m_VelX = round_to_int(m_Vel.x * 256.0f);
 	pObjCore->m_VelY = round_to_int(m_Vel.y * 256.0f);
@@ -583,10 +644,10 @@ void CCharacterCore::Write(CNetObj_CharacterCore *pObjCore)
 
 void CCharacterCore::Read(const CNetObj_CharacterCore *pObjCore)
 {
-	m_Pos.x = pObjCore->m_X;
-	m_Pos.y = pObjCore->m_Y;
-	m_Vel.x = pObjCore->m_VelX / 256.0f;
-	m_Vel.y = pObjCore->m_VelY / 256.0f;
+	m_Pos.x = pObjCore->m_X / (SERVER_TICK_SPEED > 50 ? 4.0 : 1);
+	m_Pos.y = pObjCore->m_Y / (SERVER_TICK_SPEED > 50 ? 4.0 : 1);
+	m_Vel.x = pObjCore->m_VelX / (256.0f);
+	m_Vel.y = pObjCore->m_VelY / (256.0f);
 	m_HookState = pObjCore->m_HookState;
 	m_HookTick = pObjCore->m_HookTick;
 	m_HookPos.x = pObjCore->m_HookX;

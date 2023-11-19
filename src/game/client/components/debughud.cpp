@@ -46,6 +46,9 @@ void CDebugHud::RenderNetCorrections()
 	str_format(aBuf, sizeof(aBuf), "%.0f Bps", VelspeedX / 32 * Ramp);
 	RenderRow("Velspeed.x * Ramp:", aBuf);
 
+	str_format(aBuf, sizeof(aBuf), "%.0f Bps", VelspeedX / 32);
+	RenderRow("Velspeed.x:", aBuf);
+
 	str_format(aBuf, sizeof(aBuf), "%.0f Bps", VelspeedY / 32);
 	RenderRow("Velspeed.y:", aBuf);
 
@@ -58,10 +61,13 @@ void CDebugHud::RenderNetCorrections()
 	str_from_int(pCharacter == nullptr ? -1 : pCharacter->m_TuneZone, aBuf);
 	RenderRow("Tune zone:", aBuf);
 
-	str_format(aBuf, sizeof(aBuf), "%.2f", m_pClient->m_Snap.m_pLocalCharacter->m_X / 32.0f);
+	CCharacterCore localCore;
+	localCore.Read(m_pClient->m_Snap.m_pLocalCharacter);
+
+	str_format(aBuf, sizeof(aBuf), "%.2f", localCore.m_Pos.x / 32.0f);
 	RenderRow("Pos.x:", aBuf);
 
-	str_format(aBuf, sizeof(aBuf), "%.2f", m_pClient->m_Snap.m_pLocalCharacter->m_Y / 32.0f);
+	str_format(aBuf, sizeof(aBuf), "%.2f", localCore.m_Pos.y / 32.0f);
 	RenderRow("Pos.y:", aBuf);
 
 	str_from_int(m_pClient->m_Snap.m_pLocalCharacter->m_Angle, aBuf);

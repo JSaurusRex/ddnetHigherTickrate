@@ -151,7 +151,12 @@ void CPlayers::RenderHookCollLine(
 	if(in_range(ClientID, MAX_CLIENTS - 1))
 		Position = m_pClient->m_aClients[ClientID].m_RenderPos;
 	else
-		Position = mix(vec2(Prev.m_X, Prev.m_Y), vec2(Player.m_X, Player.m_Y), IntraTick);
+	{
+		CCharacterCore previousCore, playerCore;
+		previousCore.Read(&Prev);
+		playerCore.Read(&Player);
+		Position = mix(previousCore.m_Pos, playerCore.m_Pos, IntraTick);
+	}
 	// draw hook collision line
 	{
 		bool AlwaysRenderHookColl = GameClient()->m_GameInfo.m_AllowHookColl && (Local ? g_Config.m_ClShowHookCollOwn : g_Config.m_ClShowHookCollOther) == 2;
@@ -290,7 +295,12 @@ void CPlayers::RenderHook(
 	if(in_range(ClientID, MAX_CLIENTS - 1))
 		Position = m_pClient->m_aClients[ClientID].m_RenderPos;
 	else
-		Position = mix(vec2(Prev.m_X, Prev.m_Y), vec2(Player.m_X, Player.m_Y), IntraTick);
+	{
+		CCharacterCore previousCore, playerCore;
+		previousCore.Read(&Prev);
+		playerCore.Read(&Player);
+		Position = mix(previousCore.m_Pos, playerCore.m_Pos, IntraTick);
+	}
 
 	// draw hook
 	if(Prev.m_HookState > 0 && Player.m_HookState > 0)
@@ -396,10 +406,14 @@ void CPlayers::RenderPlayer(
 
 	vec2 Direction = direction(Angle);
 	vec2 Position;
+	CCharacterCore previousCore, playerCore;
+	previousCore.Read(&Prev);
+	playerCore.Read(&Player);
 	if(in_range(ClientID, MAX_CLIENTS - 1))
 		Position = m_pClient->m_aClients[ClientID].m_RenderPos;
 	else
-		Position = mix(vec2(Prev.m_X, Prev.m_Y), vec2(Player.m_X, Player.m_Y), IntraTick);
+		Position = mix(previousCore.m_Pos, playerCore.m_Pos, IntraTick);
+	
 	vec2 Vel = mix(vec2(Prev.m_VelX / 256.0f, Prev.m_VelY / 256.0f), vec2(Player.m_VelX / 256.0f, Player.m_VelY / 256.0f), IntraTick);
 
 	m_pClient->m_Flow.Add(Position, Vel * 100.0f, 10.0f);
@@ -409,7 +423,7 @@ void CPlayers::RenderPlayer(
 	RenderInfo.m_FeetFlipped = false;
 
 	bool Stationary = Player.m_VelX <= 1 && Player.m_VelX >= -1;
-	bool InAir = !Collision()->CheckPoint(Player.m_X, Player.m_Y + 16);
+	bool InAir = !Collision()->CheckPoint(playerCore.m_Pos.x, playerCore.m_Pos.y + 16);
 	bool Running = Player.m_VelX >= 5000 || Player.m_VelX <= -5000;
 	bool WantOtherDir = (Player.m_Direction == -1 && Vel.x > 0) || (Player.m_Direction == 1 && Vel.x < 0);
 	bool Inactive = m_pClient->m_aClients[ClientID].m_Afk || m_pClient->m_aClients[ClientID].m_Paused;
@@ -453,7 +467,7 @@ void CPlayers::RenderPlayer(
 		State.Add(&g_pData->m_aAnimations[ANIM_NINJA_SWING], clamp(LastAttackTime * 2.0f, 0.0f, 1.0f), 1.0f);
 
 	// do skidding
-	if(!InAir && WantOtherDir && length(Vel * 50) > 500.0f)
+	if(!InAir && WantOtherDir && length(Vel * 50) > 500.0f*50/SERVER_TICK_SPEED)
 	{
 		static int64_t SkidSoundTime = 0;
 		if(time() - SkidSoundTime > time_freq() / 10)
@@ -557,9 +571,14 @@ void CPlayers::RenderPlayer(
 					if(g_pData->m_Weapons.m_aId[CurrentWeapon].m_aSpriteMuzzles[IteX])
 					{
 						if(PredictLocalWeapons)
-							Dir = vec2(pPlayerChar->m_X, pPlayerChar->m_Y) - vec2(pPrevChar->m_X, pPrevChar->m_Y);
+							Dir = playerCore.m_Pos - previousCore.m_Pos;
 						else
-							Dir = vec2(m_pClient->m_Snap.m_aCharacters[ClientID].m_Cur.m_X, m_pClient->m_Snap.m_aCharacters[ClientID].m_Cur.m_Y) - vec2(m_pClient->m_Snap.m_aCharacters[ClientID].m_Prev.m_X, m_pClient->m_Snap.m_aCharacters[ClientID].m_Prev.m_Y);
+						{
+							CCharacterCore currentCore, previousCore2;
+							currentCore.Read(&m_pClient->m_Snap.m_aCharacters[ClientID].m_Cur);
+							previousCore2.Read(&m_pClient->m_Snap.m_aCharacters[ClientID].m_Prev);
+							Dir = currentCore.m_Pos - previousCore2.m_Pos;
+						}
 						float HadOkenAngle = 0;
 						if(absolute(Dir.x) > 0.0001f || absolute(Dir.y) > 0.0001f)
 						{
@@ -655,12 +674,12 @@ void CPlayers::RenderPlayer(
 	// render the "shadow" tee
 	if(Local && ((g_Config.m_Debug && g_Config.m_ClUnpredictedShadow >= 0) || g_Config.m_ClUnpredictedShadow == 1))
 	{
+		CCharacterCore currentCore, previousCore2;
+		currentCore.Read(&m_pClient->m_Snap.m_aCharacters[ClientID].m_Cur);
+		previousCore2.Read(&m_pClient->m_Snap.m_aCharacters[ClientID].m_Prev);
 		vec2 ShadowPosition = Position;
 		if(ClientID >= 0)
-			ShadowPosition = mix(
-				vec2(m_pClient->m_Snap.m_aCharacters[ClientID].m_Prev.m_X, m_pClient->m_Snap.m_aCharacters[ClientID].m_Prev.m_Y),
-				vec2(m_pClient->m_Snap.m_aCharacters[ClientID].m_Cur.m_X, m_pClient->m_Snap.m_aCharacters[ClientID].m_Cur.m_Y),
-				Client()->IntraGameTick(g_Config.m_ClDummy));
+			ShadowPosition = mix(previousCore2.m_Pos, currentCore.m_Pos, Client()->IntraGameTick(g_Config.m_ClDummy));
 
 		CTeeRenderInfo Shadow = RenderInfo;
 		RenderTools()->RenderTee(&State, &Shadow, Player.m_Emote, Direction, ShadowPosition, 0.5f); // render ghost

@@ -611,9 +611,13 @@ void CGameClient::UpdatePositions()
 	}
 	else if(m_Snap.m_pLocalCharacter && m_Snap.m_pLocalPrevCharacter)
 	{
+		CCharacterCore currentCore;
+		currentCore.Read(m_Snap.m_pLocalCharacter);
+		CCharacterCore previousCore;
+		previousCore.Read(m_Snap.m_pLocalPrevCharacter);
 		m_LocalCharacterPos = mix(
-			vec2(m_Snap.m_pLocalPrevCharacter->m_X, m_Snap.m_pLocalPrevCharacter->m_Y),
-			vec2(m_Snap.m_pLocalCharacter->m_X, m_Snap.m_pLocalCharacter->m_Y), Client()->IntraGameTick(g_Config.m_ClDummy));
+			vec2(previousCore.m_Pos.x, previousCore.m_Pos.y),
+			vec2(currentCore.m_Pos.x, currentCore.m_Pos.y), Client()->IntraGameTick(g_Config.m_ClDummy));
 	}
 
 	// spectator position
@@ -634,8 +638,10 @@ void CGameClient::UpdatePositions()
 		else if(m_Snap.m_pSpectatorInfo && ((Client()->State() == IClient::STATE_DEMOPLAYBACK && m_DemoSpecID == SPEC_FOLLOW) || (Client()->State() != IClient::STATE_DEMOPLAYBACK && m_Snap.m_SpecInfo.m_SpectatorID != SPEC_FREEVIEW)))
 		{
 			if(m_Snap.m_pPrevSpectatorInfo && m_Snap.m_pPrevSpectatorInfo->m_SpectatorID == m_Snap.m_pSpectatorInfo->m_SpectatorID)
+			{
 				m_Snap.m_SpecInfo.m_Position = mix(vec2(m_Snap.m_pPrevSpectatorInfo->m_X, m_Snap.m_pPrevSpectatorInfo->m_Y),
 					vec2(m_Snap.m_pSpectatorInfo->m_X, m_Snap.m_pSpectatorInfo->m_Y), Client()->IntraGameTick(g_Config.m_ClDummy));
+			}
 			else
 				m_Snap.m_SpecInfo.m_Position = vec2(m_Snap.m_pSpectatorInfo->m_X, m_Snap.m_pSpectatorInfo->m_Y);
 			m_Snap.m_SpecInfo.m_UsePosition = true;
@@ -1661,7 +1667,9 @@ void CGameClient::OnNewSnapshot()
 			{
 				m_Snap.m_pLocalCharacter = &pChr->m_Cur;
 				m_Snap.m_pLocalPrevCharacter = &pChr->m_Prev;
-				m_LocalCharacterPos = vec2(m_Snap.m_pLocalCharacter->m_X, m_Snap.m_pLocalCharacter->m_Y);
+				CCharacterCore localCore;
+				localCore.Read(m_Snap.m_pLocalCharacter);
+				m_LocalCharacterPos = localCore.m_Pos;
 			}
 		}
 		else if(Client()->SnapFindItem(IClient::SNAP_PREV, NETOBJTYPE_CHARACTER, m_Snap.m_LocalClientID))
@@ -1857,9 +1865,10 @@ void CGameClient::OnNewSnapshot()
 		if(m_Snap.m_aCharacters[i].m_Active && (m_Snap.m_aCharacters[i].m_Cur.m_Jumped & 2) && !(m_Snap.m_aCharacters[i].m_Prev.m_Jumped & 2))
 			if(!Predict() || (i != m_Snap.m_LocalClientID && (!AntiPingPlayers() || i != m_PredictedDummyID)))
 			{
-				vec2 Pos = mix(vec2(m_Snap.m_aCharacters[i].m_Prev.m_X, m_Snap.m_aCharacters[i].m_Prev.m_Y),
-					vec2(m_Snap.m_aCharacters[i].m_Cur.m_X, m_Snap.m_aCharacters[i].m_Cur.m_Y),
-					Client()->IntraGameTick(g_Config.m_ClDummy));
+				CCharacterCore previous, current;
+				current.Read(&m_Snap.m_aCharacters[i].m_Prev);
+				previous.Read(&m_Snap.m_aCharacters[i].m_Prev);
+				vec2 Pos = mix(previous.m_Pos, current.m_Pos, Client()->IntraGameTick(g_Config.m_ClDummy));
 				float Alpha = 1.0f;
 				bool SameTeam = m_Teams.SameTeam(m_Snap.m_LocalClientID, i);
 				if(!SameTeam || m_aClients[i].m_Solo || m_aClients[m_Snap.m_LocalClientID].m_Solo)
@@ -2053,10 +2062,10 @@ void CGameClient::OnPredict()
 			if(in_range(length(PredErr), 0.05f, 5.f))
 			{
 				vec2 PredPos = mix(m_aClients[i].m_PrevPredicted.m_Pos, m_aClients[i].m_Predicted.m_Pos, Client()->PredIntraGameTick(g_Config.m_ClDummy));
-				vec2 CurPos = mix(
-					vec2(m_Snap.m_aCharacters[i].m_Prev.m_X, m_Snap.m_aCharacters[i].m_Prev.m_Y),
-					vec2(m_Snap.m_aCharacters[i].m_Cur.m_X, m_Snap.m_aCharacters[i].m_Cur.m_Y),
-					Client()->IntraGameTick(g_Config.m_ClDummy));
+				CCharacterCore previous, current;
+				previous.Read(&m_Snap.m_aCharacters[i].m_Prev);
+				current.Read(&m_Snap.m_aCharacters[i].m_Cur);
+				vec2 CurPos = mix( previous.m_Pos, current.m_Pos, Client()->IntraGameTick(g_Config.m_ClDummy));
 				vec2 RenderDiff = PredPos - aBeforeRender[i];
 				vec2 PredDiff = PredPos - CurPos;
 
@@ -2400,10 +2409,11 @@ int CGameClient::IntersectCharacter(vec2 HookPos, vec2 NewPos, vec2 &NewPos2, in
 		if(!cData.m_Active)
 			continue;
 
-		CNetObj_Character Prev = m_Snap.m_aCharacters[i].m_Prev;
-		CNetObj_Character Player = m_Snap.m_aCharacters[i].m_Cur;
+		CCharacterCore previous, player;
+		previous.Read(&m_Snap.m_aCharacters[i].m_Prev);
+		player.Read(&m_Snap.m_aCharacters[i].m_Cur);
 
-		vec2 Position = mix(vec2(Prev.m_X, Prev.m_Y), vec2(Player.m_X, Player.m_Y), Client()->IntraGameTick(g_Config.m_ClDummy));
+		vec2 Position = mix(previous.m_Pos, player.m_Pos, Client()->IntraGameTick(g_Config.m_ClDummy));
 
 		bool IsOneSuper = cData.m_Super || OwnClientData.m_Super;
 		bool IsOneSolo = cData.m_Solo || OwnClientData.m_Solo;
@@ -2463,7 +2473,9 @@ void CGameClient::UpdatePrediction()
 	m_GameWorld.m_WorldConfig.m_IsSolo = !m_Snap.m_aCharacters[m_Snap.m_LocalClientID].m_HasExtendedData && !m_aTuning[g_Config.m_ClDummy].m_PlayerCollision && !m_aTuning[g_Config.m_ClDummy].m_PlayerHooking;
 
 	// update the tuning/tunezone at the local character position with the latest tunings received before the new snapshot
-	vec2 LocalCharPos = vec2(m_Snap.m_pLocalCharacter->m_X, m_Snap.m_pLocalCharacter->m_Y);
+	CCharacterCore local;
+	local.Read(m_Snap.m_pLocalCharacter);
+	vec2 LocalCharPos = local.m_Pos;
 	m_GameWorld.m_Core.m_aTuning[g_Config.m_ClDummy] = m_aTuning[g_Config.m_ClDummy];
 
 	if(m_GameWorld.m_WorldConfig.m_UseTuneZones)
@@ -2632,10 +2644,10 @@ void CGameClient::UpdateRenderedCharacters()
 		m_aClients[i].m_RenderPrev = m_Snap.m_aCharacters[i].m_Prev;
 		m_aClients[i].m_IsPredicted = false;
 		m_aClients[i].m_IsPredictedLocal = false;
-		vec2 UnpredPos = mix(
-			vec2(m_Snap.m_aCharacters[i].m_Prev.m_X, m_Snap.m_aCharacters[i].m_Prev.m_Y),
-			vec2(m_Snap.m_aCharacters[i].m_Cur.m_X, m_Snap.m_aCharacters[i].m_Cur.m_Y),
-			Client()->IntraGameTick(g_Config.m_ClDummy));
+		CCharacterCore currentCore, previousCore;
+		previousCore.Read(&m_Snap.m_aCharacters[i].m_Prev);
+		currentCore.Read(&m_Snap.m_aCharacters[i].m_Cur);
+		vec2 UnpredPos = mix(previousCore.m_Pos, currentCore.m_Pos, Client()->IntraGameTick(g_Config.m_ClDummy));
 		vec2 Pos = UnpredPos;
 
 		CCharacter *pChar = m_PredictedWorld.GetCharacterByID(i);
@@ -2646,9 +2658,7 @@ void CGameClient::UpdateRenderedCharacters()
 
 			m_aClients[i].m_IsPredicted = true;
 
-			Pos = mix(
-				vec2(m_aClients[i].m_RenderPrev.m_X, m_aClients[i].m_RenderPrev.m_Y),
-				vec2(m_aClients[i].m_RenderCur.m_X, m_aClients[i].m_RenderCur.m_Y),
+			Pos = mix(m_aClients[i].m_PrevPredicted.m_Pos, m_aClients[i].m_Predicted.m_Pos,
 				m_aClients[i].m_IsPredicted ? Client()->PredIntraGameTick(g_Config.m_ClDummy) : Client()->IntraGameTick(g_Config.m_ClDummy));
 
 			if(i == m_Snap.m_LocalClientID)
@@ -3660,7 +3670,11 @@ bool CGameClient::InitMultiView(int Team)
 
 			// get the position of the player
 			if(m_Snap.m_aCharacters[i].m_Active)
-				PlayerPos = vec2(m_Snap.m_aCharacters[i].m_Cur.m_X, m_Snap.m_aCharacters[i].m_Cur.m_Y);
+			{
+				CCharacterCore current;
+				current.Read(&m_Snap.m_aCharacters[i].m_Cur);
+				PlayerPos = current.m_Pos;
+			}
 			else if(m_aClients[i].m_Spec)
 				PlayerPos = m_aClients[i].m_SpecChar;
 			else
@@ -3705,9 +3719,9 @@ bool CGameClient::InitMultiView(int Team)
 		vec2 CurPosition(m_Camera.m_Center);
 		if(SpectatorID != SPEC_FREEVIEW)
 		{
-			const CNetObj_Character &CurCharacter = m_Snap.m_aCharacters[SpectatorID].m_Cur;
-			CurPosition.x = CurCharacter.m_X;
-			CurPosition.y = CurCharacter.m_Y;
+			CCharacterCore current;
+			current.Read(&m_Snap.m_aCharacters[SpectatorID].m_Cur);
+			CurPosition = current.m_Pos;
 		}
 
 		int ClosestDistance = INT_MAX;
